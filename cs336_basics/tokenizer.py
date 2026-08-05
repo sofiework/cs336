@@ -141,12 +141,11 @@ def pretoken(s: int, e: int, input_path: str, special_tokens: list[str]) -> dict
     # special token
     splited: list[str] = re.split("|".join(re.escape(t) for t in special_tokens), chunk)
 
-    freq: dict[tuple[bytes], int] = defaultdict(int)
+    freq: dict[bytes, int] = defaultdict(int)
     for sp in splited:
         for pretoken in re.finditer(PAT, sp):
             # pretoken.group() -> str
-            freq[tuple(bytes([b]) for b in pretoken.group().encode("utf-8"))] += 1
-
+            freq[pretoken.group().encode("utf-8")] += 1
     return freq
 
 class RevPair:
@@ -156,25 +155,35 @@ class RevPair:
 
     def __lt__(self, other):
         return self.p > other.p
+
+def _pretoken_star(args):
+        return pretoken(*args)
     
 def train_bpe_parallel(
         input_path: str, vocab_size: int, special_tokens: list[str]
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]: 
 
-    num_process = os.cpu_count()
+    num_process = 8
+    # set max memory of each worker
+    num_chunks = max(num_process, os.path.getsize(input_path) // (100 * 1024 * 1024))
+
     with open(input_path, "rb") as f:
-        boundaries = find_chunk_boundaries(f, num_process, b"<|endoftext|>")
+        boundaries = find_chunk_boundaries(f, num_chunks, b"<|endoftext|>")
         bounds = list(zip(boundaries[:-1], boundaries[1:]))
 
     # multiprocessing pre-tokenizer
-    frequency: dict[tuple[bytes], int] = defaultdict(int)
+    raw: dict[bytes, int] = defaultdict(int)
 
+    args = [(s, e, input_path, special_tokens) for s, e in bounds]
     with Pool(processes=num_process) as pool:
-        freq = pool.starmap(pretoken, [(s, e, input_path, special_tokens) for s, e in bounds])
-
-        for d in freq:
+        for d in pool.imap_unordered(_pretoken_star, args, chunksize=1):
             for k, v in d.items():
-                frequency[k] += v
+                raw[k] += v
+
+    BYTE = [bytes([i]) for i in range(256)]
+    frequency: dict[tuple[bytes], int] = {
+        tuple(BYTE[b] for b in w) : c for w, c in raw.items()
+    }
     
     # vocab (0-255, special token)
     vocab = {i: bytes([i]) for i in range(256)}
@@ -199,14 +208,9 @@ def train_bpe_parallel(
     heap = [(-c, RevPair(p), p) for p, c in pairs.items()]
     heapq.heapify(heap)
 
-    def update_pairs_pos(p, count):
-        pairs[p] -= count
-        if pairs[p] <= 0:
-            pairs.pop(p)
-            pairs_pos.pop(p, None)
-        else:
-            heapq.heappush(heap, (-pairs[p], RevPair(p), p))
-
+    import time
+    _t0 = time.perf_counter()
+    _total = vocab_size - 256 - len(special_tokens)
     while num_merges < vocab_size - 256 - len(special_tokens):
         # find max pair
         # max_pair = max(pairs.items(), key = lambda x: (x[1], x[0]))[0] # (count, lex)
@@ -226,10 +230,14 @@ def train_bpe_parallel(
         merges.append(max_pair)
         vocab[len(vocab)] = max_pair[0] + max_pair[1]
         num_merges += 1
-        
+        if num_merges % 1000 == 0:
+            _el = time.perf_counter() - _t0
+            _rate = num_merges / _el if _el else 0
+            _eta = (_total - num_merges) / _rate if _rate else 0
+            print(f"[merge] {num_merges}/{_total} elapsed={_el:.0f}s rate={_rate:.0f}/s ETA={_eta:.0f}s", flush=True)
 
-        # update pairs, frequency
-        # by updating word tuple with merged bytes
+        # update pairs, frequency (accumulate net deltas; push heap once per pair)
+        delta = defaultdict(int)
         for word in list(pos_set):
             new_word = []
             i = 0
@@ -250,17 +258,29 @@ def train_bpe_parallel(
                 p = (word[i], word[i + 1])
                 if p in pairs:
                     pairs_pos[p].discard(word)
-                    update_pairs_pos(p, frequency[word])
+                    delta[p] -= frequency[word]
 
             # find new_pair from new_word
             for i in range(len(new_word) - 1):
                 new_p = (new_word[i], new_word[i + 1])
                 pairs_pos[new_p].add(new_word)
-                update_pairs_pos(new_p, -frequency[word])
+                delta[new_p] += frequency[word]
             
             # update frequency
             frequency[new_word] = frequency.get(new_word, 0) + frequency[word] # count
             del frequency[word]
+
+        # apply accumulated deltas: update counts, push each changed pair to heap once
+        for p, dv in delta.items():
+            if dv == 0:
+                continue
+            newc = pairs.get(p, 0) + dv
+            if newc <= 0:
+                pairs.pop(p, None)
+                pairs_pos.pop(p, None)
+            else:
+                pairs[p] = newc
+                heapq.heappush(heap, (-newc, RevPair(p), p))
 
         # remove max_pair
         pairs.pop(max_pair, None)
