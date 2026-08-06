@@ -52,26 +52,6 @@ def decode_utf8_bytes_to_str_wrong(bytestring: bytes):
 
 ---
 
-### Problem (train_bpe): BPE Tokenizer Training (15 points)
-
-> *Deliverable: Write a function that, given a path to an input text file, trains a (byte-level) BPE tokenizer.*
->
-> **Input:**
-> - `input_path: str` — Path to a text file with BPE tokenizer training data.
-> - `vocab_size: int` — Positive integer defining the maximum final vocabulary size (initial byte vocab + merges + special tokens).
-> - `special_tokens: list[str]` — Strings to add to the vocabulary. During training, treat them as hard boundaries that prevent merges across their spans, but do not include them when computing merge statistics.
->
-> **Output:**
-> - `vocab: dict[int, bytes]` — Mapping from token ID to token bytes.
-> - `merges: list[tuple[bytes, bytes]]` — BPE merges, ordered by order of creation.
->
-> Test with `uv run pytest tests/test_train_bpe.py`.
-
-**Notes / status:**
-
-
----
-
 ### Problem (train_bpe_tinystories): BPE Training on TinyStories (2 points)
 
 **(a)** Train a byte-level BPE tokenizer on TinyStories with max vocab size 10,000. Add the `<|endoftext|>` special token. Serialize vocab and merges to disk. How much time and memory did training take? What is the longest token in the vocabulary? Does it make sense?
@@ -85,14 +65,15 @@ peak memory:   0.20 GB
 vocab size:    10000
 longest token: b' accomplishment' (15 bytes)
 
-key optimization: prallel pre-tokenization with multiprocessing pool to reduce training time, pass in argument (start, end, input_path, special_tokens) into each worker, parent doesn't read the whole dataset, so each worker only read [start, end] part of dataset to reduce peak memory
-
-
 
 **(b)** Profile your code. What part of the tokenizer training process takes the most time?
 > *Deliverable: A one-to-two sentence response.*
 
 **Answer:**
+key optimization: 
+prallel pre-tokenization with multiprocessing pool to reduce training time, pass in argument (start, end, input_path, special_tokens) into each worker, so the dataset is not copied each time call a worker
+parent doesn't read the whole dataset, so each worker only read [start, end] part of dataset to reduce peak memory
+
 
 
 ---
@@ -104,30 +85,20 @@ key optimization: prallel pre-tokenization with multiprocessing pool to reduce t
 > *Deliverable: A one-to-two sentence response.*
 
 **Answer:**
+owt_vocab.pkl has 32,000 entries
+owt_merges.pkl has 31,743 merges
+
+longest token: \xc3\x83\xc3\x82 repeated 16 times. Decoded as UTF-8 that's "ÃÂ" repeated over and over (ÃÂÃÂÃÂ…)
+
+possible reason: poor web-crawl data
 
 
 **(b)** Compare and contrast the tokenizer trained on TinyStories versus OpenWebText.
 > *Deliverable: A one-to-two sentence response.*
 
 **Answer:**
-
-
----
-
-### Problem (tokenizer): Implementing the tokenizer (15 points)
-
-> *Deliverable: Implement a `Tokenizer` class that, given a vocabulary and a list of merges, encodes text into integer IDs and decodes integer IDs into text. Supports user-provided special tokens.*
->
-> Interface:
-> - `__init__(self, vocab, merges, special_tokens=None)`
-> - `from_files(cls, vocab_filepath, merges_filepath, special_tokens=None)` — classmethod
-> - `encode(self, text: str) -> list[int]`
-> - `encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]` — lazily yields token IDs for memory-efficient tokenization
-> - `decode(self, ids: list[int]) -> str`
->
-> Test with `uv run pytest tests/test_tokenizer.py`.
-
-**Notes / status:**
+vocab size difference: TinyStories 10K vs OpenWebText 32K
+TinyStories is clean, simple so the longest token comes out common English word, while OpenWebText is raw scraped web text so though bigger dataset its longest token doesn't make sense.
 
 
 ---
@@ -138,18 +109,31 @@ key optimization: prallel pre-tokenization with multiprocessing pool to reduce t
 > *Deliverable: A one-to-two sentence response.*
 
 **Answer:**
+TinyStories tokenizer on TinyStories: 4.102 bytes/token
+OpenWebText tokenizer on OpenWebText: 4.513 bytes/token
+
+The OpenWebText tokenizer achieves a higher compression ratio, because its larger 32K vocabulary, on diverse data, so it packs more bytes in each token.
 
 
 **(b)** What happens if you tokenize your OpenWebText sample with the TinyStories tokenizer? Compare the compression ratio and/or describe what happens.
 > *Deliverable: A one-to-two sentence response.*
 
 **Answer:**
+OWT sample, OWT tokenizer (native):       4.513 bytes/token
+OWT sample, TinyStories tokenizer (swap): 3.244 bytes/token
+
+TinyStories tokenizer shows a lower compression ratio than OWT tokenizer, because it lakcs merges for OWT dataset pattern, so those pattern falls back to many short tokens.
+
 
 
 **(c)** Estimate the throughput of your tokenizer (e.g., bytes/second). How long would it take to tokenize the Pile dataset (825GB of text)?
 > *Deliverable: A one-to-two sentence response.*
 
 **Answer:**
+time = dataset_size / throughput
+
+TinyStories tokenizer throughput: 1,299,650 bytes/s (Pile 825GB ~ 176.3 h)
+OpenWebText tokenizer throughput: 1,147,577 bytes/s (Pile 825GB ~ 199.7 h)
 
 
 **(d)** Using your tokenizers, encode the respective training and development datasets into integer token IDs (serialize as a NumPy `uint16` array). Why is `uint16` an appropriate choice?
@@ -158,198 +142,10 @@ key optimization: prallel pre-tokenization with multiprocessing pool to reduce t
 **Answer:**
 
 
+
 ---
 
 ## Section 3: Transformer Language Model Architecture
-
----
-
-### Problem (linear): Implementing the linear module (1 point)
-
-> *Deliverable: Implement a `Linear` class that inherits from `torch.nn.Module` and performs a linear transformation. Your implementation should follow the interface of PyTorch's built-in `nn.Linear` module, except for not having a bias argument or parameter.*
->
-> We recommend the following interface:
->
-> `def __init__(self, in_features, out_features, device=None, dtype=None)` — Construct a linear transformation module. This function should accept the following parameters:
-> - `in_features: int` — final dimension of the input
-> - `out_features: int` — final dimension of the output
-> - `device: torch.device | None = None` — Device to store the parameters on
-> - `dtype: torch.dtype | None = None` — Data type of the parameters
->
-> `def forward(self, x: torch.Tensor) -> torch.Tensor` — Apply the linear transformation to the input.
->
-> Make sure to:
-> - subclass `nn.Module`
-> - call the superclass constructor
-> - construct and store your parameter as W (not Wᵀ), putting it in an `nn.Parameter`
-> - of course, don't use `nn.Linear` or `nn.functional.linear`
->
-> For initializations, use the settings from above along with `torch.nn.init.trunc_normal_` to initialize the weights.
->
-> To test your Linear module, implement the test adapter at `[adapters.run_linear]`. The adapter should load the given weights into your Linear module. You can use `Module.load_state_dict` for this purpose. Then, run `uv run pytest -k test_linear`.
-
-**Notes / status:**
-
-
----
-
-### Problem (embedding): Implement the embedding module (1 point)
-
-> *Deliverable: Implement the `Embedding` class that inherits from `torch.nn.Module` and performs an embedding lookup. Your implementation should follow the interface of PyTorch's built-in `nn.Embedding` module.*
->
-> We recommend the following interface:
->
-> `def __init__(self, num_embeddings, embedding_dim, device=None, dtype=None)` — Construct an embedding module. This function should accept the following parameters:
-> - `num_embeddings: int` — Size of the vocabulary
-> - `embedding_dim: int` — Dimension of the embedding vectors, i.e., d_model
-> - `device: torch.device | None = None` — Device to store the parameters on
-> - `dtype: torch.dtype | None = None` — Data type of the parameters
->
-> `def forward(self, token_ids: torch.Tensor) -> torch.Tensor` — Lookup the embedding vectors for the given token IDs.
->
-> Make sure to:
-> - subclass `nn.Module`
-> - call the superclass constructor
-> - initialize your embedding matrix as an `nn.Parameter`
-> - store the embedding matrix with the d_model being the final dimension
-> - of course, don't use `nn.Embedding` or `nn.functional.embedding`
->
-> Again, use the settings from above for initialization, and use `torch.nn.init.trunc_normal_` to initialize the weights.
->
-> To test your implementation, implement the test adapter at `[adapters.run_embedding]`. Then, run `uv run pytest -k test_embedding`.
-
-**Notes / status:**
-
-
----
-
-### Problem (rmsnorm): Root Mean Square Layer Normalization (1 point)
-
-> *Deliverable: Implement RMSNorm as a `torch.nn.Module`.*
->
-> We recommend the following interface:
->
-> `def __init__(self, d_model: int, eps: float = 1e-5, device=None, dtype=None)` — Construct the RMSNorm module. This function should accept the following parameters:
-> - `d_model: int` — Hidden dimension of the model
-> - `eps: float = 1e-5` — Epsilon value for numerical stability
-> - `device: torch.device | None = None` — Device to store the parameters on
-> - `dtype: torch.dtype | None = None` — Data type of the parameters
->
-> `def forward(self, x: torch.Tensor) -> torch.Tensor` — Process an input tensor of shape `(batch_size, sequence_length, d_model)` and return a tensor of the same shape.
->
-> Note: Remember to upcast your input to `torch.float32` before performing the normalization (and later downcast to the original dtype), as described above.
->
-> To test your implementation, implement the test adapter at `[adapters.run_rmsnorm]`. Then, run `uv run pytest -k test_rmsnorm`.
-
-**Notes / status:**
-
-
----
-
-### Problem (positionwise_feedforward): Implement the position-wise feed-forward network (2 points)
-
-> *Deliverable: Implement the SwiGLU feed-forward network, composed of a SiLU activation function and a GLU.*
->
-> The SwiGLU feed-forward network is: FFN(x) = SwiGLU(x, W1, W2, W3) = W2(SiLU(W1 x) ⊙ W3 x), where x ∈ ℝ^d_model, W1, W3 ∈ ℝ^(d_ff × d_model), W2 ∈ ℝ^(d_model × d_ff), and ⊙ is element-wise multiplication.
->
-> Note: in this particular case, you should feel free to use `torch.sigmoid` in your implementation for numerical stability.
->
-> You should set d_ff to approximately (8/3) × d_model in your implementation, while ensuring that the dimensionality of the inner feed-forward layer is a multiple of 64 to make good use of your hardware. To test your implementation against our provided tests, you will need to implement the test adapter at `[adapters.run_swiglu]`. Then, run `uv run pytest -k test_swiglu` to test your implementation.
-
-**Notes / status:**
-
-
----
-
-### Problem (rope): Implement RoPE (2 points)
-
-> *Deliverable: Implement a class `RotaryPositionalEmbedding` that applies RoPE to the input tensor.*
->
-> The following interface is recommended:
->
-> `def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None)` — Construct the RoPE module and create buffers if needed.
-> - `theta: float` — Θ value for the RoPE
-> - `d_k: int` — dimension of query and key vectors
-> - `max_seq_len: int` — Maximum sequence length that will be input
-> - `device: torch.device | None = None` — Device to store the buffer on
->
-> `def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor` — Process an input tensor of shape `(..., seq_len, d_k)` and return a tensor of the same shape. Note that you should tolerate x with an arbitrary number of batch dimensions. You should assume that the token positions are a tensor of shape `(..., seq_len)` specifying the token positions of x along the sequence dimension.
->
-> You should use the token positions to slice your (possibly precomputed) cos and sin tensors along the sequence dimension.
->
-> To test your implementation, complete `[adapters.run_rope]` and make sure it passes `uv run pytest -k test_rope`.
-
-**Notes / status:**
-
-
----
-
-### Problem (softmax): Implement softmax (1 point)
-
-> *Deliverable: Write a function to apply the softmax operation on a tensor.* Your function should take two parameters: a tensor and a dimension i, and apply softmax to the i-th dimension of the input tensor. The output tensor should have the same shape as the input tensor, but its i-th dimension will now have a normalized probability distribution. Use the trick of subtracting the maximum value in the i-th dimension from all elements of the i-th dimension to avoid numerical stability issues.
->
-> To test your implementation, complete `[adapters.run_softmax]` and make sure it passes `uv run pytest -k test_softmax_matches_pytorch`.
-
-**Notes / status:**
-
-
----
-
-### Problem (scaled_dot_product_attention): Implement scaled dot-product attention (5 points)
-
-> *Deliverable: Implement the scaled dot-product attention function.* Your implementation should handle keys and queries of shape `(batch_size, ..., seq_len, d_k)` and values of shape `(batch_size, ..., seq_len, d_v)`, where `...` represents any number of other batch-like dimensions (if provided). The implementation should return an output with the shape `(batch_size, ..., seq_len, d_v)`. See Section 3.2 for a discussion on batch-like dimensions.
->
-> Your implementation should also support an optional user-provided boolean mask of shape `(seq_len, seq_len)`. The attention probabilities of positions with a mask value of True should collectively sum to 1, and the attention probabilities of positions with a mask value of False should be zero.
->
-> To test your implementation against our provided tests, you will need to implement the test adapter at `[adapters.run_scaled_dot_product_attention]`. `uv run pytest -k test_scaled_dot_product_attention` tests your implementation on third-order input tensors, while `uv run pytest -k test_4d_scaled_dot_product_attention` tests your implementation on fourth-order input tensors.
-
-**Notes / status:**
-
-
----
-
-### Problem (multihead_self_attention): Implement causal multi-head self-attention (5 points)
-
-> *Deliverable: Implement causal multi-head self-attention as a `torch.nn.Module`.* Your implementation should accept (at least) the following parameters:
-> - `d_model: int` — Dimensionality of the Transformer block inputs.
-> - `num_heads: int` — Number of heads to use in multi-head self-attention.
->
-> Following A. Vaswani et al. [8], set d_k = d_v = d_model / h. To test your implementation against our provided tests, implement the test adapter at `[adapters.run_multihead_self_attention]`. Then, run `uv run pytest -k test_multihead_self_attention` to test your implementation.
-
-**Notes / status:**
-
-
----
-
-### Problem (transformer_block): Implement the Transformer block (3 points)
-
-> Implement the pre-norm Transformer block as described in Section 3.4 and illustrated in Figure 2. Your Transformer block should accept (at least) the following parameters:
-> - `d_model: int` — Dimensionality of the Transformer block inputs.
-> - `num_heads: int` — Number of heads to use in multi-head self-attention.
-> - `d_ff: int` — Dimensionality of the position-wise feed-forward inner layer.
->
-> To test your implementation, implement the adapter `[adapters.run_transformer_block]`. Then run `uv run pytest -k test_transformer_block` to test your implementation.
->
-> *Deliverable: Transformer block code that passes the provided tests.*
-
-**Notes / status:**
-
-
----
-
-### Problem (transformer_lm): Implementing the Transformer LM (3 points)
-
-> Time to put it all together! Implement the Transformer language model as described in Section 3.1 and illustrated in Figure 1. At minimum, your implementation should accept all the aforementioned construction parameters for the Transformer block, as well as these additional parameters:
-> - `vocab_size: int` — The size of the vocabulary, necessary for determining the dimensionality of the token embedding matrix.
-> - `context_length: int` — The maximum context length, necessary for determining the dimensionality of the RoPE sin and cos buffer.
-> - `num_layers: int` — The number of Transformer blocks to use.
->
-> To test your implementation against our provided tests, you will first need to implement the test adapter at `[adapters.run_transformer_lm]`. Then, run `uv run pytest -k test_transformer_lm` to test your implementation.
->
-> *Deliverable: A Transformer LM module that passes the above tests.*
-
-**Notes / status:**
-
 
 ---
 
@@ -400,36 +196,15 @@ Suppose we constructed our model using this configuration. How many trainable pa
 
 ---
 
-### Problem (cross_entropy): Implement cross-entropy (1 point)
-
-> *Deliverable: Write a function to compute the cross-entropy loss, which takes in predicted logits (o_i) and targets (x_{i+1}) and computes the cross-entropy ℓ_i = −log softmax(o_i)[x_{i+1}].* Your function should handle the following:
-> - Subtract the largest element for numerical stability.
-> - Cancel out log and exp whenever possible.
-> - Handle any additional batch dimensions and return the average across the batch. As with Section 3.2, we assume batch-like dimensions always come first, before the vocabulary size dimension.
->
-> Implement `[adapters.run_cross_entropy]`, then run `uv run pytest -k test_cross_entropy` to test your implementation.
-
-**Notes / status:**
-
-
----
-
 ### Problem (learning_rate_tuning): Tuning the learning rate (1 point)
 
 > As we will see, one of the hyperparameters that affects training the most is the learning rate. Let's see that in practice in our toy example. Run the SGD example above with three other values for the learning rate: 1e1, 1e2, and 1e3, for just 10 training iterations. What happens with the loss for each of these learning rates? Does it decay faster, slower, or does it diverge (i.e., increase over the course of training)?
 > *Deliverable: A one-to-two sentence response with the behaviors you observed.*
 
 **Answer:**
-
-
----
-
-### Problem (adamw): Implement AdamW (2 points)
-
-> *Deliverable: Implement the AdamW optimizer as a subclass of `torch.optim.Optimizer`.* Your class should take the learning rate α in `__init__`, as well as the β, ε and λ hyperparameters. To help you keep state, the base Optimizer class gives you a dictionary `self.state`, which maps `nn.Parameter` objects to a dictionary that stores any information you need for that parameter (for AdamW, this would be the moment estimates). Implement `[adapters.get_adamw_cls]` and make sure it passes `uv run pytest -k test_adamw`.
-
-**Notes / status:**
-
+lr=1e1, loss drops monotonically but slowly
+lr=1e2, loss drops dramatically faster within a few steps
+lr=1e3, the update overshoots and loss diverges
 
 ---
 
@@ -468,94 +243,6 @@ For simplicity, when calculating memory usage of activations, consider only the 
 > *Deliverable: The number of hours training would take, with a brief justification.*
 
 **Answer:**
-
-
----
-
-### Problem (learning_rate_schedule): Implement cosine learning rate schedule with warmup (1 point)
-
-> The cosine annealing learning rate schedule takes (i) the current iteration t, (ii) the maximum learning rate α_max, (iii) the minimum (final) learning rate α_min, (iv) the number of warm-up iterations T_w, and (v) the final iteration of cosine annealing T_c. The learning rate at iteration t is defined as:
-> - (Warm-up) If t < T_w, then α_t = (t / T_w) · α_max.
-> - (Cosine annealing) If T_w ≤ t ≤ T_c, then α_t = α_min + (1/2)(1 + cos(((t − T_w)/(T_c − T_w)) π))(α_max − α_min).
-> - (Post-annealing) If t > T_c, then α_t = α_min.
->
-> *Deliverable:* Write a function that takes t, α_max, α_min, T_w and T_c, and returns the learning rate α_t according to the scheduler defined above. Then implement `[adapters.get_lr_cosine_schedule]` and make sure it passes `uv run pytest -k test_get_lr_cosine_schedule`.
-
-**Notes / status:**
-
-
----
-
-### Problem (gradient_clipping): Implement gradient clipping (1 point)
-
-> *Deliverable:* Write a function that implements gradient clipping. Your function should take a list of parameters and a maximum ℓ2-norm. It should modify each parameter gradient in place. Use ε = 10⁻⁶ (the PyTorch default). Then, implement the adapter `[adapters.run_gradient_clipping]` and make sure it passes `uv run pytest -k test_gradient_clipping`.
-
-**Notes / status:**
-
-
----
-
-## Section 5: Training Loop
-
----
-
-### Problem (data_loading): Implement data loading (2 points)
-
-> *Deliverable: Write a function that takes a numpy array x (integer array with token IDs), a `batch_size`, a `context_length` and a PyTorch device string (e.g., 'cpu' or 'cuda:0'), and returns a pair of tensors: the sampled input sequences and the corresponding next-token targets.* Both tensors should have shape `(batch_size, context_length)` containing token IDs, and both should be placed on the requested device. To test your implementation against our provided tests, you will first need to implement the test adapter at `[adapters.run_get_batch]`. Then, run `uv run pytest -k test_get_batch` to test your implementation.
-
-**Notes / status:**
-
-
----
-
-### Problem (checkpointing): Implement model checkpointing (1 point)
-
-> Implement the following two functions to load and save checkpoints:
->
-> `def save_checkpoint(model, optimizer, iteration, out)` should dump all the state from the model, optimizer and iteration into the file-like object `out`. You can use the `state_dict` method of both the model and the optimizer to get their relevant states and use `torch.save(obj, out)` to dump `obj` into `out` (PyTorch supports either a path or a file-like object here). A typical choice is to have `obj` be a dictionary, but you can use whatever format you want as long as you can load your checkpoint later. This function expects the following parameters:
-> - `model: torch.nn.Module`
-> - `optimizer: torch.optim.Optimizer`
-> - `iteration: int`
-> - `out: str | os.PathLike | typing.BinaryIO | typing.IO[bytes]`
->
-> `def load_checkpoint(src, model, optimizer)` should load a checkpoint from `src` (path or file-like object), and then recover the model and optimizer states from that checkpoint. Your function should return the iteration number that was saved to the checkpoint. You can use `torch.load(src)` to recover what you saved in your `save_checkpoint` implementation, and the `load_state_dict` method in both the model and optimizer to return them to their previous states. This function expects the following parameters:
-> - `src: str | os.PathLike | typing.BinaryIO | typing.IO[bytes]`
-> - `model: torch.nn.Module`
-> - `optimizer: torch.optim.Optimizer`
->
-> Implement the `[adapters.run_save_checkpoint]` and `[adapters.run_load_checkpoint]` adapters, and make sure they pass `uv run pytest -k test_checkpointing`.
-
-**Notes / status:**
-
-
----
-
-### Problem (training_together): Put it together (4 points)
-
-> *Deliverable: Write a script that runs a training loop to train your model on user-provided input.* In particular, we recommend that your training script allow for (at least) the following:
-> - Ability to configure and control the various model and optimizer hyperparameters.
-> - Memory-efficient loading of large training and validation datasets with `np.memmap`.
-> - Serializing checkpoints to a user-provided path.
-> - Periodically logging training and validation performance (e.g., to console and/or an external service like Weights and Biases).
-
-**Notes / status:**
-
-
----
-
-## Section 6: Generating Text
-
----
-
-### Problem (decoding): Decoding (3 points)
-
-> *Deliverable: Implement a function to decode from your language model.* We recommend that you support the following features:
-> - Generate completions for a user-provided prompt (i.e., take in some x_{1...t} and sample a completion until you hit an `<|endoftext|>` token).
-> - Allow the user to control the maximum number of generated tokens.
-> - Given a desired temperature value, apply softmax temperature scaling to the predicted next-token distributions before sampling.
-> - Top-p sampling ([A. Holtzman et al., 2020] also referred to as nucleus sampling), given a user-specified threshold value.
-
-**Notes / status:**
 
 
 ---
