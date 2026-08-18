@@ -98,15 +98,16 @@ class RotaryPositionalEmbedding(nn.Module):
     def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None):
         super().__init__()
         self.theta = theta
-        self.d_k = d_k
+        self.d_k = d_k # d_head
         self.max_seq_len = max_seq_len
 
         # theata_i,k
-        k = torch.arange(1, d_k // 2 + 1, device=device).float() # [d_k / 2]
+        k = torch.arange(1, d_k // 2 + 1, device=device).float() # [1,... d_k / 2]
         inv_theta = 1 / theta ** ((2 * k - 2) / d_k)
         pos = torch.arange(max_seq_len, device=device).float() # [max_seq_len]
 
         # pos: [max_seq_len] * inv_theta: [d_k / 2] -> [max_seq_len, d_k / 2]
+        # outer product
         angles = torch.einsum("i, k -> i k", pos, inv_theta)
 
         # pre-compute lookup table 
@@ -131,11 +132,10 @@ class RotaryPositionalEmbedding(nn.Module):
 
         return torch.stack((o1, o2), dim=-1).flatten(-2)
 
-
-def softmax(x: torch.Tensor, i: int) -> torch.Tensor:
-    max_i = x.amax(dim=i, keepdim=True)
+def softmax(x: torch.Tensor, dim_i: int) -> torch.Tensor:
+    max_i = x.amax(dim=dim_i, keepdim=True)
     e = torch.exp(x - max_i)
-    return e / e.sum(dim=i, keepdim=True)
+    return e / e.sum(dim=dim_i, keepdim=True)
 
 
 # keys:    [batch, ..., seq_len, d_k]
@@ -155,6 +155,15 @@ def scaled_dot_product_attn(queries: torch.Tensor, keys: torch.Tensor,
 
 
 class Causal_multihead_attn(nn.Module):
+    """
+    Causal MHA Attention:
+    
+    x:                    [..., S, in_features]
+    self.w (wq/wk/wv/wo): [out_features, in_features]
+
+    out:                  [..., S, in_features]
+
+    """
     def __init__(self, d_model: int, num_head: int, theta: float=None, max_seq_len: int=None, 
                  device=None, dtype=None):
         super().__init__()
@@ -162,33 +171,33 @@ class Causal_multihead_attn(nn.Module):
         self.num_head = num_head
         self.d_head = d_model // num_head
 
+        # qkv projection matrix
         self.wq = Linear(d_model, d_model, device, dtype)
         self.wk = Linear(d_model, d_model, device, dtype)
         self.wv = Linear(d_model, d_model, device, dtype)
         self.wo = Linear(d_model, d_model, device, dtype)
 
+        # positional embedding matrix
         self.theta = theta
         self.max_seq_len = max_seq_len
         if self.theta is not None and self.max_seq_len is not None:
             self.rope = RotaryPositionalEmbedding(self.theta, self.d_head, self.max_seq_len, device)
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor=None) -> torch.Tensor:
-        # mask
+        # causal mask
         seq_len = x.shape[-2]
-        no_mask = torch.ones(seq_len, seq_len, dtype=torch.bool).triu(diagonal=1)
+        no_mask = torch.ones(seq_len, seq_len, dtype=torch.bool, device=x.device).triu(diagonal=1)
 
-        # qkv
+        # qkv reshape d_model = h * head_dim
         # x: [..., seq_len, d_model]
         # q: [..., d_model, d_head] -> [..., num_head, seq_len, d_head]
         queries = einops.rearrange(self.wq(x), "... n (h d) -> ... h n d", h=self.num_head)
-
         keys = einops.rearrange(self.wk(x), "... n (h d) -> ... h n d", h=self.num_head)
-
         values = einops.rearrange(self.wv(x), "... n (h d) -> ... h n d", h=self.num_head)
 
         # RoPE
         if self.theta is not None and self.max_seq_len is not None:
-            token_positions = torch.arange(seq_len) if token_positions is None else token_positions
+            token_positions = torch.arange(seq_len, device=x.device) if token_positions is None else token_positions
 
             queries = self.rope(queries, token_positions)
             keys = self.rope(keys, token_positions)
@@ -200,6 +209,13 @@ class Causal_multihead_attn(nn.Module):
 
 
 class Transformer(nn.Module):
+    """
+    One Transformer Block:
+    
+    x:   [(B, S), in_features]
+    out: [(B, S), in_features]
+
+    """
     def __init__(self, d_model: int, num_head: int, d_ff: int, theta: float, max_seq_len: int,
                  device=None, dtype=None):
         super().__init__()
@@ -234,7 +250,7 @@ class Transformer(nn.Module):
 
 class Transformer_LM(nn.Module):
     def __init__(self, d_model: int, num_head: int, d_ff: int, 
-                 vocab_size: int, context_length: int, num_layers: int, theta: float=None, max_seq_len: int=None,
+                 vocab_size: int, num_layers: int, theta: float=None, max_seq_len: int=None,
                  device=None, dtype=None):
         super().__init__()
         self.d_model = d_model
@@ -245,7 +261,6 @@ class Transformer_LM(nn.Module):
         self.max_seq_len = max_seq_len
 
         self.vocab_size = vocab_size
-        self.context_length = context_length
         self.num_layers = num_layers
 
         # modules

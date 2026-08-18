@@ -1,6 +1,8 @@
-import torch
+import torch, random, typing, os
 import einops, math
 from collections.abc import Iterable
+import numpy as np
+import torch.nn as nn
 
 
 def cross_entropy(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
@@ -38,3 +40,16 @@ def gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: flo
         for p in params:
             p.grad *= scale
     return
+
+
+def data_loader(x: np.ndarray, batch_size: int, context_len: int, 
+                device: str) -> tuple[torch.Tensor, torch.Tensor]:
+    
+    starts = np.random.randint(0, len(x) - context_len, size=batch_size)
+
+    inputs = np.stack([x[s : s + context_len] for s in starts])
+    targets = np.stack([x[s + 1 : s + 1 + context_len] for s in starts])
+
+    return (torch.from_numpy(inputs).to(torch.int64).to(device),
+            torch.from_numpy(targets).to(torch.int64).to(device))
+
