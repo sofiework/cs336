@@ -126,6 +126,7 @@ def bench_mode_label(args):
             torch.cuda.synchronize()
         end = timeit.default_timer()
         times.append(end - start)
+        print(f"running iter {i} of label {args.label}, mode {args.mode}")
 
     time_mean = sum(times) / len(times) # float scalar
     time_std = torch.std(torch.tensor(times)).item() # float scalar
@@ -145,6 +146,8 @@ def main():
             args.label = label
             args.mode = mode
             bench_mode_label(args)
+
+            print(f"benchmarking done for label: {label}, mode: {mode}")
 
             # empty between test
             if torch.cuda.is_available():
