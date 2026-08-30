@@ -1,0 +1,2 @@
+{"label": "batch_sweep with batch = 4", "meta": {"mode": "fwd", "seed": 0, "label": "large", "steps": 10, "warmup": 5, "vocab_size": 10000, "context_length": 512, "batch_size": 4}, "model": {"d_model": 1280, "d_ff": 5120, "num_layers": 36, "num_heads": 20}, "total_tokens": 2048, "AdamW": {"max_lr": 1e-05, "beta1": 0.9, "beta2": 0.999, "eps": 1e-08, "weight_decay": 0.01}}
+{"iter": 9, "time_mean": 0.8341185702942312, "time_std": 0.3576321303844452}
