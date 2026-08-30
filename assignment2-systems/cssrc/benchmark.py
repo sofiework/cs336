@@ -135,19 +135,22 @@ def bench_mode_label(args):
     ### logging
     logger.log(time_mean, time_std)
 
+    print(
+        f"benchmarking and logging done for label: {args.label}, mode: {args.mode}\nmean time = time_mean\nstd time = time_std"
+    )
+    
+
 def main():
     modes = ["fwd", "fwd_bwd", "fwd_bwd_opt"]
-    labels = ["small", "medium", "large", "xl", "10B"]
+    labels = ["small", "medium", "large", "xl"]
 
     # parse once, and call bench on different label & mode
     args = get_args()
-    for mode in modes:
-        for label in labels:
+    for label in labels:
+        for mode in modes:
             args.label = label
             args.mode = mode
             bench_mode_label(args)
-
-            print(f"benchmarking done for label: {label}, mode: {mode}")
 
             # empty between test
             if torch.cuda.is_available():
