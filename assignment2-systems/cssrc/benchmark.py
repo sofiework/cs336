@@ -136,7 +136,7 @@ def bench_mode_label(args):
     logger.log(time_mean, time_std)
 
     print(
-        f"benchmarking and logging done for label: {args.label}, mode: {args.mode}\nmean time = time_mean\nstd time = time_std"
+        f"benchmarking and logging done for label: {args.label}, mode: {args.mode}\nmean time = {time_mean}\nstd time = {time_std}"
     )
     
 
