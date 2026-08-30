@@ -49,12 +49,24 @@ log per step
 
 """
 
-import json, argparse, math
+import json, argparse, math, torch
 import pandas as pd
 from pathlib import Path
 
 from cssrc.config import ModelConfig
 
+def device_info() -> dict:
+    if not torch.cuda.is_available():
+        return {"device": "cpu"}
+    p = torch.cuda.get_device_properties(0)
+    return {
+        "device": p.name,                          # 'NVIDIA H200'
+        "device_mem_gb": round(p.total_memory / 1e9, 1),
+        "device_count": torch.cuda.device_count(),
+        "capability": f"{p.major}.{p.minor}",
+        "torch": torch.__version__,
+        "cuda": torch.version.cuda,
+    }
 
 class Logger:
     def __init__(self, log_file, args: argparse.Namespace, model_config: ModelConfig):
@@ -62,20 +74,22 @@ class Logger:
         self.args = args
         self.config = model_config
 
-        with open(self.log_file, "w") as out_file:
+        with open(self.log_file, "a") as out_file:
             # per test data
             per_test = {
-                "label": f"batch_sweep with batch = {self.args.batch_size}",
-                "meta": {
+                "test_setup": {
                     "mode": self.args.mode,
-                    "seed": self.args.seed,
                     "label": self.args.label,
+                },
+                "meta": {
+                    "seed": self.args.seed,
                     "steps": self.args.steps,
                     "warmup": self.args.warmup,
                     "vocab_size": self.args.vocab_size,
                     "context_length": self.args.context_length,
-                    "batch_size": self.args.batch_size,
+                    "batch_size": self.args.batch_size
                 },
+                "device": device_info(),
                 "model": {
                     "d_model": self.config.d_model,
                     "d_ff": self.config.d_ff,
@@ -94,11 +108,11 @@ class Logger:
             json.dump(per_test, out_file)
             out_file.write("\n")
 
-    def log(self, i, time_mean, time_std):
+    def log(self, time_mean, time_std):
         with open(self.log_file, "a") as out_file:
             # per step data
             per_step = {
-                "iter": i,
+                # "iter": i,
                 "time_mean": time_mean,
                 "time_std": time_std
             }

@@ -3,7 +3,7 @@ import timeit, argparse
 
 from cs336_basics.model import Transformer_LM
 from cs336_basics.optimizer import AdamW
-from cs336_basics.utils import cross_entropy, gradient_clipping
+from cs336_basics.utils import cross_entropy
 
 from cssrc.config import ModelConfig
 from cssrc.logger import Logger
@@ -66,9 +66,9 @@ def get_args():
 
 
 
-def main():
-    args = get_args()
-    torch.manual_seed = args.seed
+def bench_mode_label(args):
+    
+    torch.manual_seed(args.seed)
     
     ### initiate model & opt
     config = SIZES[args.label]
@@ -110,13 +110,16 @@ def main():
 
     ### warmup CUDA context
     for _ in range(args.warmup):
-        start = timeit.default_timer()
         step()
+    # sync after warmup
+    if args.device == "cuda":
+        torch.cuda.synchronize()
 
     ### n steps
     times = []
     
-    for i in range(args.steps):
+    for i in range(args.steps): # 10 measurament
+        start = timeit.default_timer()
         step()
 
         if args.device == "cuda":
@@ -129,8 +132,23 @@ def main():
 
 
     ### logging
-    logger.log(i, time_mean, time_std)
+    logger.log(time_mean, time_std)
 
+def main():
+    modes = ["fwd", "fwd_bwd", "fwd_bwd_opt"]
+    labels = ["small", "medium", "large", "xl", "10B"]
+
+    # parse once, and call bench on different label & mode
+    args = get_args()
+    for mode in modes:
+        for label in labels:
+            args.label = label
+            args.mode = mode
+            bench_mode_label(args)
+
+            # empty between test
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
 if __name__ == "__main__":
     main()
