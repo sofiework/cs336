@@ -85,7 +85,7 @@ def main():
 
     optimizer = AdamW(model.parameters(), args.max_lr, (args.beta1, args.beta2), args.adam_eps, args.weight_decay)
 
-    log_file = f"results/bench_{args.label}.json"
+    log_file = f"results/bench_{args.label}.jsonl"
     logger = Logger(log_file, args, config)
 
     # randomize token IDs: [batch_size, context_length]
