@@ -80,11 +80,11 @@ class Logger:
                 "test_setup": {
                     "mode": self.args.mode,
                     "label": self.args.label,
+                    "warmup": self.args.warmup
                 },
                 "meta": {
                     "seed": self.args.seed,
                     "steps": self.args.steps,
-                    "warmup": self.args.warmup,
                     "vocab_size": self.args.vocab_size,
                     "context_length": self.args.context_length,
                     "batch_size": self.args.batch_size

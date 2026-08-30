@@ -148,9 +148,11 @@ def main():
     args = get_args()
     for label in labels:
         for mode in modes:
-            args.label = label
-            args.mode = mode
-            bench_mode_label(args)
+            for warmup in [0, 2, 5]:
+                args.label = label
+                args.mode = mode
+                args.warmup = warmup
+                bench_mode_label(args)
 
             # empty between test
             if torch.cuda.is_available():
