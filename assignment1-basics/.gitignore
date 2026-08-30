@@ -1,37 +1,10 @@
-# CS336 monorepo .gitignore
-# Merged from: assignment1-basics/.gitignore + assignment2-systems/.gitignore
-# + the previous repo-root entries.
-
-# ── Repo-specific ────────────────────────────────────────────────
-push_monorepo.sh
-.claude/
-
-# ── Data, checkpoints, tokenizer artifacts ───────────────────────
 data/
-*.npy
-*.bin
-*.pt
-*.ckpt
 *.pkl
-checkpoint*
-
-# ── Benchmarking / profiling output ──────────────────────────────
 *.prof
 out.prof
-wandb/
-test_results.xml
+checkpoint*
+*.md
 
-# ── Virtualenvs ──────────────────────────────────────────────────
-.venv/
-336_a2_test_venv/
-
-# ── Submission archives ──────────────────────────────────────────
-*.zip
-
-# ── Tooling caches ───────────────────────────────────────────────
-.pytest_cache/
-.ruff_cache/
-.DS_Store
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -194,6 +167,5 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# ── Keep test fixtures tracked (negations must come last to win) ──
-*.nsys-rep
-tests/fixtures/*.pt
+.ruff_cache/
+*.zip
