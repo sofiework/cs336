@@ -85,8 +85,16 @@ def bench_mode_label(args):
 
     optimizer = AdamW(model.parameters(), args.max_lr, (args.beta1, args.beta2), args.adam_eps, args.weight_decay)
 
-    log_file = f"results/bench_{args.label}.jsonl"
+    ### log per-test setup
+    from datetime import datetime
+    from pathlib import Path
+
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")   # '20260830_213638'
+    log_file = Path("results") / run_id / f"bench_{args.label}.jsonl"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
     logger = Logger(log_file, args, config)
+
 
     # randomize token IDs: [batch_size, context_length]
     token_ids = torch.randint(0, args.vocab_size, (args.batch_size, args.context_length), device=args.device)

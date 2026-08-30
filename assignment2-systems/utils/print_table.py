@@ -29,7 +29,11 @@ with (
         for l in lines:
             d = json.loads(l)
             if "test_setup" in d:
-                pending = {"mode": d["test_setup"]["mode"], "label": d["test_setup"]["label"]}
+                pending = {
+                    "mode": d["test_setup"]["mode"], 
+                    "label": d["test_setup"]["label"],
+                    "warmup": d["warmup"]["warmup"]
+                }
             elif "time_mean" in d:
                 records.append({**pending, "time_mean": d["time_mean"], "time_std": d["time_std"]})
                 pending = {}
@@ -37,13 +41,18 @@ with (
 
 # Make dataframe
 df = pd.DataFrame(records)
-table = df.pivot(index="mode", columns="label", values="time_std")
+table = df.pivot(index="mode", columns="label", values="time_mean")
 table = table[["small", "medium", "large", "xl"]]          # force column order
 table = table.reindex(["fwd", "fwd_bwd", "fwd_bwd_opt"])   # force row order
 
-# Write to latex file
-# latex = table.to_latex(index=False, escape=False, column_format="lrrrr", float_format="%.2f")
-# Path("results/model_sizes.tex").write_text(latex)
+sub = df[df["mode"] == "fwd_bwd_opt"]
+table2 = (
+    sub.pivot(index="warmup", columns="label", values="time_mean")
+       [["small", "medium", "large", "xl"]]
+       .sort_index()
+)
 
 # Write to md
-Path("results/model_std.md").write_text((table).to_markdown(floatfmt=".6f"))
+# Path("results/model_mean.md").write_text((table).to_markdown(floatfmt=".1f"))
+
+Path("results/model_warmup.md").write_text((table * 1000).to_markdown(floatfmt=".1f"))
