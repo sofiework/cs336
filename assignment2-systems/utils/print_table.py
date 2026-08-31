@@ -32,18 +32,18 @@ with (
                 pending = {
                     "mode": d["test_setup"]["mode"], 
                     "label": d["test_setup"]["label"],
-                    "warmup": d["warmup"]["warmup"]
+                    "warmup": d["test_setup"]["warmup"]
                 }
             elif "time_mean" in d:
                 records.append({**pending, "time_mean": d["time_mean"], "time_std": d["time_std"]})
                 pending = {}
 
 
-# Make dataframe
+# Make dataframe 
 df = pd.DataFrame(records)
-table = df.pivot(index="mode", columns="label", values="time_mean")
-table = table[["small", "medium", "large", "xl"]]          # force column order
-table = table.reindex(["fwd", "fwd_bwd", "fwd_bwd_opt"])   # force row order
+# table = df.pivot(index="mode", columns="label", values="time_mean")
+# table = table[["small", "medium", "large", "xl"]]          # force column order
+# table = table.reindex(["fwd", "fwd_bwd", "fwd_bwd_opt"])   # force row order
 
 sub = df[df["mode"] == "fwd_bwd_opt"]
 table2 = (
@@ -55,4 +55,4 @@ table2 = (
 # Write to md
 # Path("results/model_mean.md").write_text((table).to_markdown(floatfmt=".1f"))
 
-Path("results/model_warmup.md").write_text((table * 1000).to_markdown(floatfmt=".1f"))
+Path("results/model_warmup.md").write_text((table2 * 1000).to_markdown(floatfmt=".2f"))
