@@ -163,7 +163,7 @@ def main():
     # parse once, and call bench on different label & mode
     args = get_args()
     for label in labels:
-        for mode in modes:
+        for mode in modes[:-1]:
             for context_length in [512, 1024, 2048]:
                 args.label = label
                 args.mode = mode
