@@ -8,7 +8,6 @@ from cs336_basics.utils import cross_entropy
 from nsys_annt_attn import annotated_scaled_dot_product_attn
 
 from cssrc.config import ModelConfig
-from cssrc.logger import Logger
 
 
 """
@@ -48,7 +47,7 @@ SIZES = {
 }
 
 WARMUP = 5 # for CUDA context, don't scale with model size
-STEPS = 10
+STEPS = 5
 VOCAB = 10000
 CTX_LEN = 512
 BATCH = 4
@@ -63,6 +62,7 @@ def get_args():
     p.add_argument("--label", type=str, default="small")
     p.add_argument("--warmup", type=int, default=WARMUP)
     p.add_argument("--nvtx", action="store_true")
+    p.add_argument("--use_bf16", action="store_true")
 
     p.add_argument("--steps", type=int, default=STEPS)
     p.add_argument("--context_length", type=int, default=CTX_LEN)
@@ -111,20 +111,33 @@ def bench_mode_label(args):
     token_ids = torch.randint(0, args.vocab_size, (args.batch_size, args.context_length), device=args.device)
 
 
-    def step():
-        # time forward
-        logits = model(token_ids)
+    import torch.cuda.nvtx as nvtx
+    from contextlib import nullcontext
 
+    ctx =  torch.autocast(device_type=args.device, dtype=torch.bfloat16) if args.use_bf16 else nullcontext()
+
+    @nvtx.range("forward backward mode")
+    def step():
+        with nvtx.range("forward"):
+            # time forward
+            with ctx: # no-op if not use_bf16
+                logits = model(token_ids)
+
+        
         # time forward + back
         if args.mode == "fwd_bwd" or args.mode == "fwd_bwd_opt":
-            # wait for all scheduled GPU kernel to finish
-            loss = cross_entropy(logits, token_ids)
-            optimizer.zero_grad()
-            loss.backward()
+            with nvtx.range("forward + backward"):
+                # wait for all scheduled GPU kernel to finish
+                with ctx:
+                    loss = cross_entropy(logits, token_ids)
+                optimizer.zero_grad()
+                loss.backward()
 
-            # time forward + back + opt
-            if args.mode == "fwd_bwd_opt":
-                optimizer.step()
+                
+                # time forward + back + opt
+                if args.mode == "fwd_bwd_opt":
+                    with nvtx.range("forward + backward + optimizer"):
+                        optimizer.step()
 
 
     ### warmup CUDA context
@@ -134,46 +147,44 @@ def bench_mode_label(args):
     if args.device == "cuda":
         torch.cuda.synchronize()
 
-    ### n steps
-    times = []
-    
-    for i in range(args.steps): # 10 measurament
-        start = timeit.default_timer()
-        step()
+
+    ### profile n steps
+    torch.cuda.cudart().cudaProfilerStart() # nsys profile after warmup
+
+    for i in range(args.steps):
+        with nvtx.range(f"step_{i}"):
+            step()
 
         if args.device == "cuda":
             torch.cuda.synchronize()
-        end = timeit.default_timer()
-        times.append(end - start)
-        print(f"running iter {i} of label {args.label}, mode {args.mode}")
 
-    time_mean = sum(times) / len(times) # float scalar
-    time_std = torch.std(torch.tensor(times)).item() # float scalar
-
-
-    print(
-        f"benchmarking done for label: {args.label}, mode: {args.mode}\nmean time = {time_mean}\nstd time = {time_std}"
-    )
+    torch.cuda.cudart().cudaProfilerStop()
+    print(f"benchmarking done for label: {args.label}")
     
 
 def main():
     modes = ["fwd", "fwd_bwd", "fwd_bwd_opt"]
     labels = ["small", "medium", "large", "xl"]
+    contexts = [512, 1024, 2048]
 
-    # parse once, and call bench on different label & mode
+    # one config per nsys profile
     args = get_args()
-    for label in labels:
-        for mode in modes[:-1]:
-            for context_length in [512, 1024, 2048]:
-                args.label = label
-                args.mode = mode
-                args.context_length = context_length
-                bench_mode_label(args)
-                break
+    bench_mode_label(args)
 
-            # empty between test
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+    # empty between test
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 if __name__ == "__main__":
     main()
+
+
+"""
+bench 
+fwd, fwd_bwd
+use_bf16 on / off
+all model size
+
+fix context_length, batch_size
+
+"""
