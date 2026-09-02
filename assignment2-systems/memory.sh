@@ -7,7 +7,7 @@ LABEL=xl
 CTXS=(128 2048)
 MODES=("fwd" "fwd_bwd" "fwd_bwd_opt")
 BATCH=1
-STEPS=3
+STEPS=1
 OUTDIR=results
 mkdir -p "$OUTDIR"
 
