@@ -30,6 +30,7 @@ for label in "${LABELS[@]}"; do
         uv run python cssrc/nsys_benchmark.py \
           --mode "$mode" \
           --label "$label" \
+          --context_length 1024 \
           --nvtx \
           $BF16_FLAG \
         || echo "!!! FAILED: $NAME (likely OOM) — continuing"

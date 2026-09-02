@@ -123,21 +123,30 @@ def bench_mode_label(args):
             with ctx: # no-op if not use_bf16
                 logits = model(token_ids)
 
+                if args.device == "cuda":
+                    torch.cuda.synchronize()
+
         
         # time forward + back
         if args.mode == "fwd_bwd" or args.mode == "fwd_bwd_opt":
-            with nvtx.range("forward + backward"):
+            with nvtx.range("backward"):
                 # wait for all scheduled GPU kernel to finish
                 with ctx:
                     loss = cross_entropy(logits, token_ids)
                 optimizer.zero_grad()
                 loss.backward()
 
+                if args.device == "cuda":
+                    torch.cuda.synchronize()
+
                 
-                # time forward + back + opt
-                if args.mode == "fwd_bwd_opt":
-                    with nvtx.range("forward + backward + optimizer"):
-                        optimizer.step()
+            # time forward + back + opt
+            if args.mode == "fwd_bwd_opt":
+                with nvtx.range("optimizer"):
+                    optimizer.step()
+
+                    if args.device == "cuda":
+                        torch.cuda.synchronize()
 
 
     ### warmup CUDA context

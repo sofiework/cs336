@@ -23,6 +23,22 @@ print(s)
 
 
 """
+d. sweep test
+
+model_size * precision * mode
+
+d-1. under large
+    bf16: fwd 47ms, bwd 89ms
+    fp32: fwd 52ms, bwd 270ms
+
+    backward time dropped significantly with half precision, because its 2x matmul FLOPs than forward
+
+
+"""
+
+
+
+"""
 a.
 tensor(10.0001)
 tensor(9.9531, dtype=torch.float16)
@@ -57,3 +73,5 @@ fp16: e5m10, bf16: e8m7, fp32: e8m23
 bf16 is lower precision but higher range than fp16, same range as fp32 (8 exponent bits), so its safe for layer norm 
 
 """
+
+
