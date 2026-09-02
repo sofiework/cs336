@@ -63,6 +63,7 @@ def get_args():
     p.add_argument("--warmup", type=int, default=WARMUP)
     p.add_argument("--nvtx", action="store_true")
     p.add_argument("--use_bf16", action="store_true")
+    p.add_argument("--memory_out_name", type=str, default="memory_prof")
 
     p.add_argument("--steps", type=int, default=STEPS)
     p.add_argument("--context_length", type=int, default=CTX_LEN)
@@ -174,8 +175,8 @@ def bench_mode_label(args):
     torch.cuda.cudart().cudaProfilerStop()
 
     ### memory bench
-    torch.cuda.memory._dump_snapshot("memory_snapshot.pickle")
-    torch.cuda.memory._record_memory_history(enalbed=None)
+    torch.cuda.memory._dump_snapshot(args.memory_out_name)
+    torch.cuda.memory._record_memory_history(enabled=None)
     
 
 def main():
