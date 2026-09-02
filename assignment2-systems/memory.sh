@@ -13,6 +13,13 @@ mkdir -p "$OUTDIR"
 for ctx in "${CTXS[@]}"; do
   for mode in "${MODES[@]}"; do
 
+    # xl at ctx 2048 does not fit in 80GB with batch 4
+    if [ "$ctx" -ge 2048 ]; then
+      BATCH=1
+    else
+      BATCH=4
+    fi
+
     NAME="mem_${LABEL}_${ctx}_${mode}_bf16"
     echo "=== $NAME ==="
 
@@ -20,6 +27,7 @@ for ctx in "${CTXS[@]}"; do
       --mode "$mode" \
       --label "$LABEL" \
       --context_length "$ctx" \
+      --batch_size "$BATCH" \
       --steps "$STEPS" \
       --memory_out_name "$OUTDIR/$NAME" \
       --nvtx \
