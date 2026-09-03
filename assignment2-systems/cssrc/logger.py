@@ -74,7 +74,7 @@ class Logger:
         self.args = args
         self.config = model_config
 
-        with open(self.log_file, "w") as out_file:
+        with open(self.log_file, "a") as out_file:
             # per test data
             per_test = {
                 "test_setup": {
@@ -129,3 +129,6 @@ class Logger:
                 "mean_bwd_time": mean_bwd_time,
                 "fwd_memory": fwd_memory
             }
+
+            json.dump(per_step, out_file)
+            out_file.write("\n")

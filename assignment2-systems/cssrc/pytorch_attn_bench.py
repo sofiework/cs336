@@ -144,7 +144,7 @@ def bench_mode_label(args):
 
 def main():
     d_models = [16, 32, 64, 128]
-    contexts = [256, 1024, 2048, 4096, 8192, 16384]
+    contexts = [256, 1024, 4096, 8192, 16384]
 
     # one config per nsys profile
     args = get_args()
@@ -163,6 +163,8 @@ def main():
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
                     torch.cuda.reset_peak_memory_stats()
+
+    print("== ok ==")
 
 if __name__ == "__main__":
     main()
