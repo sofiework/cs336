@@ -38,9 +38,10 @@ def get_args():
     p.add_argument("--mode", type=str, default="fwd")
     p.add_argument("--label", type=str, default="small")
     p.add_argument("--warmup", type=int, default=WARMUP)
+
     p.add_argument("--nvtx", action="store_true")
     p.add_argument("--use_bf16", action="store_true")
-    p.add_argument("--memory_out_name", type=str, default="memory_prof")
+    p.add_argument("--torch_compile", action="store_true")
 
     p.add_argument("--steps", type=int, default=STEPS)
     p.add_argument("--vocab_size", type=int, default=10000)
@@ -60,10 +61,12 @@ def bench_mode_label(args):
     torch.manual_seed(args.seed)
 
     ### logger
-    log_file = f"results/py_attn_{args.context_length}_D{args.d_model}.jsonl"
+    log_file = f"results/py_cmpl_attn_{args.context_length}_D{args.d_model}.jsonl"
     logger = Logger(log_file, args, SIZE[args.d_model])
 
     mask = torch.ones(args.context_length, args.context_length, dtype=bool).tril(diagonal=0).to(args.device)
+
+    layer = torch.compile(scaled_dot_product_attn) if args.torch_compile else scaled_dot_product_attn
 
     def step() -> torch.Tensor:
         # qkv shaep [B, seq_len, D]
@@ -72,7 +75,7 @@ def bench_mode_label(args):
         keys = torch.randn(args.batch_size, args.context_length, args.d_model, device=args.device, requires_grad=True)
         values = torch.randn(args.batch_size, args.context_length, args.d_model, device=args.device, requires_grad=True)
 
-        return scaled_dot_product_attn(queries, keys, values, mask)
+        return layer(queries, keys, values, mask)
 
 
     ### mix_precision bf16
@@ -85,7 +88,9 @@ def bench_mode_label(args):
    
     ### warmup CUDA context
     for _ in range(args.warmup):
-        step()
+        logits = step()
+        logits.backward(torch.ones_like(logits))
+
     # sync after warmup
     if args.device == "cuda":
         torch.cuda.synchronize()
@@ -143,7 +148,7 @@ def main():
 
             try:
                 bench_mode_label(args)
-            except torch.cuda.OutOfMemoryError:
+            except RuntimeError as e:
                 print(f"OOM error: d_model = {d_model}, context_length = {context_length}")
             finally:
 
