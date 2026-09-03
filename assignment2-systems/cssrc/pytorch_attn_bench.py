@@ -60,7 +60,7 @@ def bench_mode_label(args):
     torch.manual_seed(args.seed)
 
     ### logger
-    log_file = f"results/pyattn_{args.context_length}_D{args.d_model}"
+    log_file = f"results/py_attn_{args.context_length}_D{args.d_model}.jsonl"
     logger = Logger(log_file, args, SIZE[args.d_model])
 
     mask = torch.ones(args.context_length, args.context_length, dtype=bool).tril(diagonal=0).to(args.device)
