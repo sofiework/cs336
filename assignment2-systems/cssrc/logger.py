@@ -74,7 +74,7 @@ class Logger:
         self.args = args
         self.config = model_config
 
-        with open(self.log_file, "a") as out_file:
+        with open(self.log_file, "w") as out_file:
             # per test data
             per_test = {
                 "test_setup": {
@@ -95,15 +95,15 @@ class Logger:
                     "d_ff": self.config.d_ff,
                     "num_layers": self.config.num_layers,
                     "num_heads": self.config.num_heads
-                },
-                "total_tokens": self.args.context_length * self.args.batch_size,
-                "AdamW": {
-                    "max_lr": self.args.max_lr,
-                    "beta1": self.args.beta1,
-                    "beta2": self.args.beta2,
-                    "eps": self.args.adam_eps,
-                    "weight_decay": self.args.weight_decay
                 }
+                # "total_tokens": self.args.context_length * self.args.batch_size,
+                # "AdamW": {
+                #     "max_lr": self.args.max_lr,
+                #     "beta1": self.args.beta1,
+                #     "beta2": self.args.beta2,
+                #     "eps": self.args.adam_eps,
+                #     "weight_decay": self.args.weight_decay
+                # }
             }
             json.dump(per_test, out_file)
             out_file.write("\n")
@@ -119,4 +119,13 @@ class Logger:
 
             json.dump(per_step, out_file)
             out_file.write("\n")
-                
+
+
+    def log_time_mem(self, mean_fwd_time, mean_bwd_time, fwd_memory):
+        with open(self.log_file, "a") as out_file:
+            # per step data
+            per_step = {
+                "mean_fwd_time": mean_fwd_time,
+                "mean_bwd_time": mean_bwd_time,
+                "fwd_memory": fwd_memory
+            }
