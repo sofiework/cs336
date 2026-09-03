@@ -1,14 +1,14 @@
 #!/bin/bash
-# memory.sh — memory sweep: xl × precision (fp32 vs bf16), ctx=1024, full step
+# memory.sh — memory sweep: xl × precision (fp32 vs bf16), ctx=512, forward only, 2 steps
 # torch memory snapshots only; run nsys separately for 2.1.6(a).
 set -u
 
 LABEL=xl
 CTX=512
-MODE=fwd_bwd_opt
+MODE=fwd
 PRECS=("fp32" "bf16")
 BATCH=1
-STEPS=1
+STEPS=2
 OUTDIR=results
 mkdir -p "$OUTDIR"
 
