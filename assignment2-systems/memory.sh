@@ -1,34 +1,38 @@
 #!/bin/bash
-# memory.sh — memory sweep: xl × context length × mode, mixed precision (bf16)
+# memory.sh — memory sweep: xl × precision (fp32 vs bf16), ctx=1024, full step
 # torch memory snapshots only; run nsys separately for 2.1.6(a).
 set -u
 
 LABEL=xl
-CTXS=(128 2048)
-MODES=("fwd" "fwd_bwd" "fwd_bwd_opt")
+CTX=512
+MODE=fwd_bwd_opt
+PRECS=("fp32" "bf16")
 BATCH=1
 STEPS=1
 OUTDIR=results
 mkdir -p "$OUTDIR"
 
-for ctx in "${CTXS[@]}"; do
-  for mode in "${MODES[@]}"; do
+for prec in "${PRECS[@]}"; do
 
-    NAME="mem_${LABEL}_${ctx}_${mode}_bf16"
-    echo "=== $NAME ==="
+  BF16_FLAG=""
+  if [ "$prec" = "bf16" ]; then
+    BF16_FLAG="--use_bf16"
+  fi
 
-    PYTHONPATH=. uv run python cssrc/memory_benchmark.py \
-      --mode "$mode" \
-      --label "$LABEL" \
-      --context_length "$ctx" \
-      --batch_size "$BATCH" \
-      --steps "$STEPS" \
-      --memory_out_name "$OUTDIR/$NAME" \
-      --nvtx \
-      --use_bf16 \
-      || echo "!!! FAILED: $NAME (likely OOM) — continuing"
+  NAME="mem_${LABEL}_${CTX}_${MODE}_${prec}"
+  echo "=== $NAME ==="
 
-  done
+  PYTHONPATH=. uv run python cssrc/memory_benchmark.py \
+    --mode "$MODE" \
+    --label "$LABEL" \
+    --context_length "$CTX" \
+    --batch_size "$BATCH" \
+    --steps "$STEPS" \
+    --memory_out_name "$OUTDIR/$NAME" \
+    --nvtx \
+    $BF16_FLAG \
+    || echo "!!! FAILED: $NAME (likely OOM) — continuing"
+
 done
 
 echo "done — snapshots in $OUTDIR/"
