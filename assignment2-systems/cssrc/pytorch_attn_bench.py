@@ -127,6 +127,7 @@ def bench_mode_label(args):
     mean_bwd_time = sum(bwd_time) / len(bwd_time)
     
     logger.log_time_mem(mean_fwd_time, mean_bwd_time, fwd_memory)
+    print(f"done for d_model = {args.d_model}, context_length = {args.context_length}")
     
 
 def main():
